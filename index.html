@@ -635,7 +635,12 @@ function applyTransform(){
 }
 function drawGrid(){
   const canvas = document.getElementById('grid-canvas');
-  const dpr = window.devicePixelRatio || 1;
+  const maxCanvas = 4096;
+  let dpr = window.devicePixelRatio || 1;
+  if(mapNaturalW * dpr > maxCanvas || mapNaturalH * dpr > maxCanvas){
+    dpr = Math.min(maxCanvas / mapNaturalW, maxCanvas / mapNaturalH, dpr);
+    dpr = Math.max(1, Math.floor(dpr));
+  }
   canvas.width = mapNaturalW * dpr;
   canvas.height = mapNaturalH * dpr;
   canvas.style.width = mapNaturalW+'px';
