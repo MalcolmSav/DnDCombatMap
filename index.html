@@ -45,9 +45,9 @@ html,body{height:100%;overflow:hidden;background:var(--dark);color:var(--text);f
 #map-img{display:block;image-rendering:pixelated}
 #grid-canvas{position:absolute;top:0;left:0;pointer-events:none}
 .token{
-  position:absolute;width:36px;height:36px;border-radius:50%;
+  position:absolute;border-radius:50%;
   display:flex;align-items:center;justify-content:center;
-  font-family:'Cinzel',serif;font-size:13px;font-weight:700;
+  font-family:'Cinzel',serif;font-weight:700;
   border:2px solid rgba(255,255,255,0.3);cursor:grab;
   user-select:none;touch-action:none;transition:box-shadow .1s;
   z-index:5;
@@ -635,31 +635,42 @@ function applyTransform(){
 }
 function drawGrid(){
   const canvas = document.getElementById('grid-canvas');
-  canvas.width = mapNaturalW; canvas.height = mapNaturalH;
-  canvas.style.width = mapNaturalW+'px'; canvas.style.height = mapNaturalH+'px';
+  const dpr = window.devicePixelRatio || 1;
+  canvas.width = mapNaturalW * dpr;
+  canvas.height = mapNaturalH * dpr;
+  canvas.style.width = mapNaturalW+'px';
+  canvas.style.height = mapNaturalH+'px';
   canvas.style.display='block';
   const ctx = canvas.getContext('2d');
-  ctx.clearRect(0,0,canvas.width,canvas.height);
+  ctx.scale(dpr, dpr);
+  ctx.clearRect(0,0,mapNaturalW,mapNaturalH);
   if(calibrating){
     ctx.strokeStyle = 'rgba(0,255,200,0.7)';
     ctx.lineWidth = 1.5;
   } else {
     ctx.strokeStyle = 'rgba(255,255,255,0.12)';
-    ctx.lineWidth = .6;
+    ctx.lineWidth = 1;
   }
   const cols = Math.ceil((mapNaturalW-gridOffX)/cellW)+1;
   const rows = Math.ceil((mapNaturalH-gridOffY)/cellH)+1;
-  for(let i=0;i<=cols;i++){const x=gridOffX+i*cellW;if(x<0)continue;ctx.beginPath();ctx.moveTo(x,0);ctx.lineTo(x,canvas.height);ctx.stroke()}
-  for(let j=0;j<=rows;j++){const y=gridOffY+j*cellH;if(y<0)continue;ctx.beginPath();ctx.moveTo(0,y);ctx.lineTo(canvas.width,y);ctx.stroke()}
+  for(let i=0;i<=cols;i++){const x=Math.round(gridOffX+i*cellW)+0.5;if(x<0)continue;ctx.beginPath();ctx.moveTo(x,0);ctx.lineTo(x,mapNaturalH);ctx.stroke()}
+  for(let j=0;j<=rows;j++){const y=Math.round(gridOffY+j*cellH)+0.5;if(y<0)continue;ctx.beginPath();ctx.moveTo(0,y);ctx.lineTo(mapNaturalW,y);ctx.stroke()}
 }
 
 // TOKENS
+function tokenSize(){ return Math.max(20, Math.min(cellW, cellH) * 0.85); }
+
 function renderTokens(){
   const vp = document.getElementById('map-viewport');
   vp.querySelectorAll('.token').forEach(t=>t.remove());
+  const ts = tokenSize();
+  const half = ts / 2;
+  const emojiSize = Math.max(10, ts * 0.55);
+  const hpFontSize = Math.max(6, ts * 0.2);
+  const deadSize = Math.max(10, ts * 0.5);
   characters.forEach(c=>{
-    const px = gridOffX + c.x*cellW + cellW/2 - 18;
-    const py = gridOffY + c.y*cellH + cellH/2 - 18;
+    const px = gridOffX + c.x*cellW + cellW/2 - half;
+    const py = gridOffY + c.y*cellH + cellH/2 - half;
     const div = document.createElement('div');
     div.className = 'token'
       + (c.hp<=0?' dead':'')
@@ -667,15 +678,16 @@ function renderTokens(){
       + (c.isMonster?' monster-token':'');
     div.id = 'tok-'+c.id;
     div.style.left = px+'px'; div.style.top = py+'px';
+    div.style.width = ts+'px'; div.style.height = ts+'px';
     div.style.background = c.color+'cc';
     div.style.borderColor = c.color;
     if(calibrating){ div.style.opacity = '0.3'; div.style.cursor = 'default'; }
 
     const showHp = !c.isMonster || dmMode;
     const hpLabel = showHp ? `${c.hp}/${c.maxHp}` : c.name.substring(0,3);
-    div.innerHTML = `<span style="font-size:16px">${c.emoji}</span>
-      <div class="token-hp">${hpLabel}</div>
-      ${c.hp<=0?'<div class="token-dead-icon">💀</div>':''}`;
+    div.innerHTML = `<span style="font-size:${emojiSize}px">${c.emoji}</span>
+      <div class="token-hp" style="font-size:${hpFontSize}px">${hpLabel}</div>
+      ${c.hp<=0?'<div class="token-dead-icon" style="font-size:'+deadSize+'px">💀</div>':''}`;
     attachTokenDrag(div, c.id);
     vp.appendChild(div);
   });
@@ -719,8 +731,9 @@ function attachTokenDrag(el, id){
     c.y=Math.max(0,Math.round(startCY+(dy/viewScale)/cellH));
     const tok=document.getElementById('tok-'+id);
     if(tok){
-      tok.style.left=(gridOffX+c.x*cellW+cellW/2-18)+'px';
-      tok.style.top=(gridOffY+c.y*cellH+cellH/2-18)+'px';
+      const half = tokenSize()/2;
+      tok.style.left=(gridOffX+c.x*cellW+cellW/2-half)+'px';
+      tok.style.top=(gridOffY+c.y*cellH+cellH/2-half)+'px';
     }
     updateRangeOverlay();
   }
