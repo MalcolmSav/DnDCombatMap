@@ -271,6 +271,7 @@ html,body{height:100%;overflow:hidden;background:var(--dark);color:var(--text);f
     <button class="dm-btn" onclick="nextRound()">End Round</button>
     <button class="dm-btn danger" onclick="clearMap()">Clear</button>
     <button class="dm-btn" id="grid-btn" onclick="toggleCalib()">Grid</button>
+    <button class="dm-btn" onclick="fitMap()">Fit</button>
     <button class="dm-btn" onclick="saveSession()" style="border-color:#5a9;color:#5a9">Save</button>
     <button class="dm-btn" onclick="document.getElementById('load-input').click()" style="border-color:#5a9;color:#5a9">Load</button>
     <input type="file" id="load-input" accept=".json" style="display:none">
@@ -378,6 +379,7 @@ let turnIdx = 0;
 let mapLoaded = false;
 let mapNaturalW = 800, mapNaturalH = 600;
 let viewScale = 1, viewX = 0, viewY = 0;
+let fitScale = 0.1;
 let panStart = null;
 let draggingId = null;
 let selectedId = null;
@@ -595,6 +597,14 @@ function clearMap(){
   document.querySelector('#map-viewport').querySelectorAll('.token').forEach(t=>t.remove());
   mapLoaded = false;
 }
+function fitMap(){
+  if(!mapLoaded) return;
+  const mc = document.getElementById('map-container');
+  viewScale = fitScale;
+  viewX = (mc.clientWidth - mapNaturalW*viewScale)/2;
+  viewY = (mc.clientHeight - mapNaturalH*viewScale)/2;
+  applyTransform();
+}
 
 // MAP
 document.getElementById('file-input').addEventListener('change', e=>{
@@ -607,7 +617,8 @@ document.getElementById('file-input').addEventListener('change', e=>{
       mapNaturalH = img.naturalHeight;
       const mc = document.getElementById('map-container');
       const mw = mc.clientWidth, mh = mc.clientHeight;
-      viewScale = Math.min(mw/mapNaturalW, mh/mapNaturalH, 1);
+      fitScale = Math.min(mw/mapNaturalW, mh/mapNaturalH);
+      viewScale = fitScale;
       viewX = (mw - mapNaturalW*viewScale)/2;
       viewY = (mh - mapNaturalH*viewScale)/2;
       img.style.width = mapNaturalW+'px';
@@ -775,7 +786,7 @@ mc.addEventListener('touchmove', e=>{
     const dx=e.touches[0].clientX-e.touches[1].clientX;
     const dy=e.touches[0].clientY-e.touches[1].clientY;
     const dist=Math.hypot(dx,dy);
-    viewScale=Math.max(0.2,Math.min(4,pinchStart.scale*(dist/lastDist)));
+    viewScale=Math.max(fitScale,Math.min(4,pinchStart.scale*(dist/lastDist)));
     applyTransform();
   }
 },{passive:false});
@@ -783,7 +794,7 @@ mc.addEventListener('touchend',()=>{panStart=null;lastDist=null;pinchStart=null}
 mc.addEventListener('mousedown',e=>{if(draggingId!==null)return;panStart={x:e.clientX-viewX,y:e.clientY-viewY}});
 window.addEventListener('mousemove',e=>{if(panStart&&draggingId===null){viewX=e.clientX-panStart.x;viewY=e.clientY-panStart.y;applyTransform()}});
 window.addEventListener('mouseup',()=>{panStart=null});
-mc.addEventListener('wheel',e=>{e.preventDefault();viewScale=Math.max(0.2,Math.min(4,viewScale*(e.deltaY>0?0.9:1.1)));applyTransform()},{passive:false});
+mc.addEventListener('wheel',e=>{e.preventDefault();viewScale=Math.max(fitScale,Math.min(4,viewScale*(e.deltaY>0?0.9:1.1)));applyTransform()},{passive:false});
 
 // EDIT PARTY
 function showEditModal(){
