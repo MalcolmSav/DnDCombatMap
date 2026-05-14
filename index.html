@@ -284,6 +284,7 @@ html,body{height:100%;overflow:hidden;background:var(--dark);color:var(--text);f
     <button class="dm-btn" onclick="fitMap()">Fit</button>
     <button class="dm-btn" onclick="saveSession()" style="border-color:#5a9;color:#5a9">Save</button>
     <button class="dm-btn" onclick="document.getElementById('load-input').click()" style="border-color:#5a9;color:#5a9">Load</button>
+    <button class="dm-btn danger" onclick="newSession()">New</button>
     <input type="file" id="load-input" accept=".json" style="display:none">
     <div id="initiative-list"></div>
   </div>
@@ -480,6 +481,7 @@ function addMonsters(){
   renderCards();
   renderTokens();
   toast(`${count > 1 ? count + ' ' : ''}${name} added!`);
+  autoSave();
 }
 
 function removeMonster(id){
@@ -492,6 +494,7 @@ function removeMonster(id){
   renderCards();
   renderTokens();
   toast(`${name} removed`);
+  autoSave();
 }
 
 // CARDS
@@ -584,6 +587,7 @@ function changeHp(id, dir){
   renderCards();
   renderTokens();
   if(c.hp===0) toast(`${c.name} is down!`);
+  autoSave();
 }
 
 function nextTurn(){
@@ -595,6 +599,7 @@ function nextTurn(){
   renderTokens();
   const name = c.isMonster && !dmMode ? '???' : c.name;
   toast(`${name}'s turn`);
+  autoSave();
 }
 function nextRound(){
   round++;
@@ -602,6 +607,7 @@ function nextRound(){
   document.getElementById('round-num').textContent = round;
   renderCards();
   toast(`Round ${round} begins!`);
+  autoSave();
 }
 function clearMap(){
   document.getElementById('map-img').style.display='none';
@@ -609,6 +615,12 @@ function clearMap(){
   document.getElementById('grid-overlay').style.display='none';
   document.querySelector('#map-viewport').querySelectorAll('.token').forEach(t=>t.remove());
   mapLoaded = false;
+  try { localStorage.removeItem('dnd-map'); } catch(e){}
+}
+function newSession(){
+  if(!confirm('Start a new session? This clears all saved data.')) return;
+  try { localStorage.removeItem('dnd-session'); localStorage.removeItem('dnd-map'); } catch(e){}
+  location.reload();
 }
 function fitMap(){
   if(!mapLoaded) return;
@@ -647,6 +659,7 @@ document.getElementById('file-input').addEventListener('change', e=>{
       mapLoaded = true;
       applyTransform();
       renderTokens();
+      autoSave();
     };
     img.src = ev.target.result;
   };
@@ -751,7 +764,7 @@ function attachTokenDrag(el, id){
     }
     updateRangeOverlay();
   }
-  function onEnd(){ draggingId=null; renderTokens(); renderCards(); }
+  function onEnd(){ draggingId=null; renderTokens(); renderCards(); autoSave(); }
   el.addEventListener('touchstart',e=>{e.stopPropagation();const t=e.touches[0];onStart(t.clientX,t.clientY)},{passive:true});
   el.addEventListener('touchmove',e=>{e.preventDefault();e.stopPropagation();const t=e.touches[0];onMove(t.clientX,t.clientY)},{passive:false});
   el.addEventListener('touchend',e=>{e.stopPropagation();onEnd()});
@@ -894,6 +907,7 @@ function saveEdits(){
   renderCards();
   renderTokens();
   toast('Party updated!');
+  autoSave();
 }
 
 // GRID CALIBRATION
@@ -920,18 +934,96 @@ function setCellW(val){
   document.getElementById('cellw-val').textContent = val;
   drawGrid();
   renderTokens();
+  autoSave();
 }
 function setCellH(val){
   cellH = parseInt(val);
   document.getElementById('cellh-val').textContent = val;
   drawGrid();
   renderTokens();
+  autoSave();
 }
 function nudgeGrid(axis, dir){
   if(axis==='x') gridOffX += dir;
   else gridOffY += dir;
   drawGrid();
   renderTokens();
+  autoSave();
+}
+
+// AUTO PERSISTENCE
+function autoSave(){
+  try {
+    const data = {
+      version: 1,
+      characters: characters,
+      nextId: nextId,
+      round: round,
+      turnIdx: turnIdx,
+      cellW: cellW,
+      cellH: cellH,
+      gridOffX: gridOffX,
+      gridOffY: gridOffY,
+    };
+    localStorage.setItem('dnd-session', JSON.stringify(data));
+  } catch(e){}
+  // Save map separately (may fail if too large)
+  try {
+    const img = document.getElementById('map-img');
+    if(img.src && mapLoaded){
+      localStorage.setItem('dnd-map', img.src);
+    }
+  } catch(e){
+    localStorage.removeItem('dnd-map');
+  }
+}
+
+function autoLoad(){
+  try {
+    const raw = localStorage.getItem('dnd-session');
+    if(!raw) return false;
+    const data = JSON.parse(raw);
+    if(!data.characters) return false;
+    characters = data.characters;
+    nextId = data.nextId || 100;
+    round = data.round || 1;
+    turnIdx = data.turnIdx || 0;
+    cellW = data.cellW || 40;
+    cellH = data.cellH || 40;
+    gridOffX = data.gridOffX || 0;
+    gridOffY = data.gridOffY || 0;
+    document.getElementById('round-num').textContent = round;
+    document.getElementById('cellw-slider').value = cellW;
+    document.getElementById('cellw-val').textContent = cellW;
+    document.getElementById('cellh-slider').value = cellH;
+    document.getElementById('cellh-val').textContent = cellH;
+
+    // Restore map
+    const mapSrc = localStorage.getItem('dnd-map');
+    if(mapSrc){
+      const img = document.getElementById('map-img');
+      img.onload = ()=>{
+        mapNaturalW = img.naturalWidth;
+        mapNaturalH = img.naturalHeight;
+        const mc = document.getElementById('map-container');
+        const mw = mc.clientWidth, mh = mc.clientHeight;
+        fitScale = Math.min(mw/mapNaturalW, mh/mapNaturalH);
+        viewScale = fitScale;
+        viewX = (mw - mapNaturalW*viewScale)/2;
+        viewY = (mh - mapNaturalH*viewScale)/2;
+        img.style.width = mapNaturalW+'px';
+        img.style.height = mapNaturalH+'px';
+        img.style.display = 'block';
+        document.getElementById('upload-placeholder').style.display='none';
+        mapLoaded = true;
+        applyTransform();
+        drawGrid();
+        renderTokens();
+      };
+      img.src = mapSrc;
+    }
+    return true;
+  } catch(e){ return false; }
 }
 
 // SAVE / LOAD SESSION
@@ -983,6 +1075,7 @@ document.getElementById('load-input').addEventListener('change', e=>{
       renderCards();
       if(mapLoaded){ drawGrid(); renderTokens(); }
       toast('Session loaded! Upload your map.');
+      autoSave();
     } catch(err){
       toast('Invalid session file');
     }
@@ -997,8 +1090,10 @@ ps.textContent = `@keyframes pulse{0%,100%{opacity:1}50%{opacity:.5}}`;
 document.head.appendChild(ps);
 
 // INIT
+const restored = autoLoad();
 renderCards();
-toast('Session ready — upload a map to begin');
+if(restored) toast('Session restored!');
+else toast('Session ready — upload a map to begin');
 </script>
 </body>
 </html>
