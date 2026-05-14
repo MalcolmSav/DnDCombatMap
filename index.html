@@ -205,6 +205,13 @@ html,body{height:100%;overflow:hidden;background:var(--dark);color:var(--text);f
   padding:4px 2px;border-radius:4px;font-size:11px;
 }
 .edit-label{font-size:8px;color:var(--text-dim);font-family:'Cinzel',serif;display:block;margin-bottom:2px;letter-spacing:.3px}
+.edit-remove{
+  width:20px;height:20px;border-radius:50%;border:1px solid var(--blood);
+  background:transparent;color:var(--blood-bright);font-size:11px;
+  cursor:pointer;display:flex;align-items:center;justify-content:center;
+  flex-shrink:0;align-self:center;
+}
+.edit-remove:active{opacity:.5}
 
 #monster-modal{display:none}
 
@@ -314,6 +321,9 @@ html,body{height:100%;overflow:hidden;background:var(--dark);color:var(--text);f
   <div class="modal" style="max-width:360px">
     <h2>Edit Party</h2>
     <div id="edit-chars-list"></div>
+    <div class="modal-btns" style="margin-bottom:8px">
+      <button class="modal-btn confirm" onclick="addPlayerRow()" style="flex:none;padding:8px 14px">+ Add Player</button>
+    </div>
     <div class="modal-btns">
       <button class="modal-btn cancel" onclick="closeEditModal()">Cancel</button>
       <button class="modal-btn confirm" onclick="saveEdits()">Save</button>
@@ -785,47 +795,101 @@ window.addEventListener('mouseup',()=>{panStart=null});
 mc.addEventListener('wheel',e=>{e.preventDefault();viewScale=Math.max(fitScale,Math.min(4,viewScale*(e.deltaY>0?0.9:1.1)));applyTransform()},{passive:false});
 
 // EDIT PARTY
+let editTempId = -1;
+
+function buildEditRow(c){
+  const row = document.createElement('div');
+  row.className = 'edit-char-row';
+  row.dataset.editId = c.id;
+  row.innerHTML = `
+    <button class="edit-remove" onclick="this.parentElement.remove()">✕</button>
+    <div style="flex:1;min-width:0">
+      <span class="edit-label">Name</span>
+      <input class="name-input" value="${c.name}" data-field="name">
+    </div>
+    <div>
+      <span class="edit-label">Class</span>
+      <select data-field="cls">
+        ${CLASSES.map(cl=>`<option value="${cl}" ${cl===c.cls?'selected':''}>${cl}</option>`).join('')}
+      </select>
+    </div>
+    <div>
+      <span class="edit-label">Max HP</span>
+      <input class="hp-input" type="number" value="${c.maxHp}" data-field="maxHp">
+    </div>
+    <div>
+      <span class="edit-label">Speed</span>
+      <input class="speed-input" type="number" value="${c.speed}" step="5" data-field="speed">
+    </div>`;
+  return row;
+}
+
 function showEditModal(){
   const list = document.getElementById('edit-chars-list');
   list.innerHTML = '';
+  editTempId = -1;
   characters.filter(c=>!c.isMonster).forEach(c=>{
-    const row = document.createElement('div');
-    row.className = 'edit-char-row';
-    row.innerHTML = `
-      <div style="flex:1;min-width:0">
-        <span class="edit-label">Name</span>
-        <input class="name-input" value="${c.name}" data-id="${c.id}" data-field="name">
-      </div>
-      <div>
-        <span class="edit-label">Class</span>
-        <select data-id="${c.id}" data-field="cls">
-          ${CLASSES.map(cl=>`<option value="${cl}" ${cl===c.cls?'selected':''}>${cl}</option>`).join('')}
-        </select>
-      </div>
-      <div>
-        <span class="edit-label">Max HP</span>
-        <input class="hp-input" type="number" value="${c.maxHp}" data-id="${c.id}" data-field="maxHp">
-      </div>
-      <div>
-        <span class="edit-label">Speed</span>
-        <input class="speed-input" type="number" value="${c.speed}" step="5" data-id="${c.id}" data-field="speed">
-      </div>`;
-    list.appendChild(row);
+    list.appendChild(buildEditRow(c));
   });
   document.getElementById('edit-modal').style.display = 'flex';
 }
+
+function addPlayerRow(){
+  const list = document.getElementById('edit-chars-list');
+  const newChar = {
+    id: editTempId--,
+    name: 'New Hero',
+    cls: 'Fighter',
+    maxHp: 30,
+    speed: 30,
+  };
+  list.appendChild(buildEditRow(newChar));
+  list.lastElementChild.querySelector('.name-input').focus();
+}
+
 function closeEditModal(){ document.getElementById('edit-modal').style.display = 'none'; }
+
 function saveEdits(){
-  document.querySelectorAll('#edit-chars-list input, #edit-chars-list select').forEach(el=>{
-    const id = parseInt(el.dataset.id);
-    const c = characters.find(x=>x.id===id);
-    if(!c) return;
-    const field = el.dataset.field;
-    if(field==='name') c.name = el.value || 'Hero';
-    if(field==='cls'){ c.cls = el.value; c.emoji = getClassEmoji(el.value); }
-    if(field==='maxHp'){ const v=Math.max(1,parseInt(el.value)||1); c.maxHp=v; c.hp=Math.min(c.hp,v); }
-    if(field==='speed') c.speed = Math.max(5, parseInt(el.value)||30);
+  const rows = document.querySelectorAll('#edit-chars-list .edit-char-row');
+  const monsters = characters.filter(c=>c.isMonster);
+  const newPlayers = [];
+
+  rows.forEach(row=>{
+    const editId = parseInt(row.dataset.editId);
+    const name = row.querySelector('[data-field="name"]').value || 'Hero';
+    const cls = row.querySelector('[data-field="cls"]').value;
+    const maxHp = Math.max(1, parseInt(row.querySelector('[data-field="maxHp"]').value)||30);
+    const speed = Math.max(5, parseInt(row.querySelector('[data-field="speed"]').value)||30);
+
+    const existing = characters.find(x=>x.id===editId && !x.isMonster);
+    if(existing){
+      existing.name = name;
+      existing.cls = cls;
+      existing.emoji = getClassEmoji(cls);
+      existing.maxHp = maxHp;
+      existing.hp = Math.min(existing.hp, maxHp);
+      existing.speed = speed;
+      newPlayers.push(existing);
+    } else {
+      const colorIdx = newPlayers.length % COLORS.length;
+      newPlayers.push({
+        id: nextId++,
+        name: name,
+        cls: cls,
+        emoji: getClassEmoji(cls),
+        color: COLORS[colorIdx],
+        hp: maxHp,
+        maxHp: maxHp,
+        speed: speed,
+        x: 3 + newPlayers.length,
+        y: 3,
+        isMonster: false,
+      });
+    }
   });
+
+  characters = [...newPlayers, ...monsters];
+  if(turnIdx >= characters.length) turnIdx = 0;
   closeEditModal();
   renderCards();
   renderTokens();
